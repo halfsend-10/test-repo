@@ -70,7 +70,10 @@ is_org_bot() {
   local username="${1:-}"
   [[ -z "${username}" ]] && return 1
   [[ -z "${ORG_NAME:-}" ]] && return 1
-  [[ "${username}" =~ ^${ORG_NAME}-.+\[bot\]$ ]]
+  # Quoted glob, not a regex: ORG_NAME is matched literally (org names could
+  # otherwise contain regex metacharacters) and "[bot]" isn't parsed as a
+  # bracket expression.
+  [[ "${username}" == "${ORG_NAME}-"*"[bot]" ]]
 }
 
 # Helper: check if user is the PR/issue author

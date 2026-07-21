@@ -104,6 +104,16 @@ run_test "is_org_bot: prioritize bot matches" 0 \
 run_test "is_org_bot: third-party bot rejected" 1 \
   'is_org_bot "renovate[bot]"'
 
+# ORG_NAME is matched literally, not as a regex fragment — an org name
+# containing regex metacharacters must not be treated as a pattern
+run_test "is_org_bot: org name with regex metacharacters matches literally" 0 \
+  'is_org_bot "a+b.c-coder[bot]"' \
+  "ORG_NAME=a+b.c"
+
+run_test "is_org_bot: regex-metachar org name rejects unrelated bot" 1 \
+  'is_org_bot "abXc-coder[bot]"' \
+  "ORG_NAME=a+b.c"
+
 # --- has_label tests ---
 
 run_test "has_label: label present" 0 \
