@@ -148,20 +148,19 @@ jobs:
             esac
           }
 
-          has_write_permission() { has_repo_permission "${1:-}" write; }
-
           # Slash-command auth; optional $1 = write|triage (default write).
-          is_authorized() {
-            has_repo_permission "${COMMENT_USER_LOGIN}" "${1:-write}"
-          }
+          is_authorized() { has_repo_permission "${COMMENT_USER_LOGIN}" "${1:-write}"; }
 
           # Event-actor auth; $1=user, optional $2 = write|triage (default write).
-          is_event_actor_authorized() {
-            has_repo_permission "${1:-}" "${2:-write}"
-          }
+          is_event_actor_authorized() { has_repo_permission "${1:-}" "${2:-write}"; }
 
-          is_issue_author() {
-            [[ "${COMMENT_USER_LOGIN}" == "${ISSUE_USER_LOGIN}" ]]
+          is_issue_author() { [[ "${COMMENT_USER_LOGIN}" == "${ISSUE_USER_LOGIN}" ]]; }
+
+          # Org's own agent bots bypass the collaborator permission API
+          # (#5188, #2636). Org-prefixed to exclude third-party bots.
+          is_org_bot() {
+            [[ -z "${1:-}" || -z "${ORG_NAME:-}" ]] && return 1
+            [[ "${1}" =~ ^${ORG_NAME}-.+\[bot\]$ ]]
           }
 
           has_label() {
@@ -243,11 +242,11 @@ jobs:
 
             issues)
               if [[ "${EVENT_ACTION}" == "opened" ]]; then
-                if is_event_actor_authorized "${ISSUE_USER_LOGIN}" triage; then
+                if is_org_bot "${ISSUE_USER_LOGIN}" || is_event_actor_authorized "${ISSUE_USER_LOGIN}" triage; then
                   STAGE="triage"
                 fi
               elif [[ "${EVENT_ACTION}" == "edited" ]]; then
-                if is_event_actor_authorized "${EVENT_SENDER_LOGIN}" triage; then
+                if is_org_bot "${EVENT_SENDER_LOGIN}" || is_event_actor_authorized "${EVENT_SENDER_LOGIN}" triage; then
                   STAGE="triage"
                 fi
               elif [[ "${EVENT_ACTION}" == "labeled" ]]; then
@@ -269,7 +268,7 @@ jobs:
             pull_request_target)
               case "${EVENT_ACTION}" in
                 opened|synchronize|ready_for_review)
-                  if is_event_actor_authorized "${PR_USER_LOGIN}" triage; then
+                  if is_org_bot "${PR_USER_LOGIN}" || is_event_actor_authorized "${PR_USER_LOGIN}" triage; then
                     STAGE="review"
                   fi
                   ;;
