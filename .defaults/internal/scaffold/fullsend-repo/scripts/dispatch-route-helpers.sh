@@ -31,7 +31,11 @@ has_repo_permission() {
   }
   role=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${username}/permission" \
     --jq '.role_name' 2>"${api_err}") || {
-    echo "::warning::Permission API call failed for ${username}: $(cat "${api_err}")" >&2
+    # Sanitize before logging: a crafted API/gh-cli error containing "::"
+    # could otherwise be interpreted as a GitHub Actions workflow command.
+    local sanitized_err
+    sanitized_err=$(tr '\n' ' ' < "${api_err}" | sed 's/::/: /g')
+    echo "::warning::Permission API call failed for ${username}: ${sanitized_err}" >&2
     rm -f "${api_err}"
     return 1
   }
