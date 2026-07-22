@@ -53,66 +53,104 @@ run_test() {
 
 # --- is_org_bot tests ---
 
-# Org coder bot matches
-run_test "is_org_bot: coder bot matches" 0 \
+# Path 1: fullsend's own shared, vendor-owned Apps match unconditionally,
+# regardless of ORG_NAME — this is the default deployment model
+# (ADR 0029/0059/0068), where every adopting org installs the same
+# fullsend-ai-<role>[bot] Apps rather than org-named ones.
+run_test "is_org_bot: shared fullsend-ai coder bot matches regardless of ORG_NAME" 0 \
+  'is_org_bot "fullsend-ai-coder[bot]"' \
+  "ORG_NAME=some-other-customer-org"
+
+run_test "is_org_bot: shared fullsend-ai review bot matches" 0 \
+  'is_org_bot "fullsend-ai-review[bot]"'
+
+run_test "is_org_bot: shared fullsend-ai triage bot matches" 0 \
+  'is_org_bot "fullsend-ai-triage[bot]"'
+
+run_test "is_org_bot: shared fullsend-ai retro bot matches" 0 \
+  'is_org_bot "fullsend-ai-retro[bot]"'
+
+run_test "is_org_bot: shared fullsend-ai prioritize bot matches" 0 \
+  'is_org_bot "fullsend-ai-prioritize[bot]"'
+
+# Path 1 doesn't need ORG_NAME at all
+run_test "is_org_bot: shared fullsend-ai bot matches with ORG_NAME unset" 0 \
+  'is_org_bot "fullsend-ai-coder[bot]"' \
+  "ORG_NAME="
+
+# Path 1 is exact-role-match only — not a wildcard on the fullsend-ai- prefix
+run_test "is_org_bot: fullsend-ai prefix with unknown role rejected" 1 \
+  'is_org_bot "fullsend-ai-exploit[bot]"'
+
+# Path 2: a self-managed org's own exact ${ORG_NAME}-<role>[bot] identity
+# (ADR 0029/0033) — for orgs running their own private Apps.
+run_test "is_org_bot: self-managed org coder bot matches" 0 \
   'is_org_bot "test-org-coder[bot]"'
 
-# Org code bot matches
-run_test "is_org_bot: code bot matches" 0 \
-  'is_org_bot "test-org-code[bot]"'
+run_test "is_org_bot: self-managed org review bot matches" 0 \
+  'is_org_bot "test-org-review[bot]"'
 
-# Random bot does not match
-run_test "is_org_bot: random bot rejected" 1 \
-  'is_org_bot "random-bot[bot]"'
+run_test "is_org_bot: self-managed org triage bot matches" 0 \
+  'is_org_bot "test-org-triage[bot]"'
+
+run_test "is_org_bot: self-managed org retro bot matches" 0 \
+  'is_org_bot "test-org-retro[bot]"'
+
+run_test "is_org_bot: self-managed org prioritize bot matches" 0 \
+  'is_org_bot "test-org-prioritize[bot]"'
+
+# Path 2 requires ORG_NAME
+run_test "is_org_bot: self-managed match rejected with empty ORG_NAME" 1 \
+  'is_org_bot "test-org-coder[bot]"' \
+  "ORG_NAME="
+
+# Path 2 is exact-role-match only — not a wildcard on the ${ORG_NAME}- prefix.
+# This is the spoofing vector the wildcard design allowed: a third party
+# registering "${ORG_NAME}-<anything>[bot]" must NOT match.
+run_test "is_org_bot: org-prefixed non-role bot rejected (no wildcard)" 1 \
+  'is_org_bot "test-org-exploit[bot]"'
+
+# A different self-managed org's bot does not match this org's identity
+run_test "is_org_bot: different org's self-managed bot rejected" 1 \
+  'is_org_bot "other-org-coder[bot]"'
+
+# Third-party bots matching neither path are rejected
+run_test "is_org_bot: third-party bot rejected" 1 \
+  'is_org_bot "renovate[bot]"'
 
 # Human user does not match
 run_test "is_org_bot: human user rejected" 1 \
   'is_org_bot "human-dev"'
 
-# Empty username returns 1
+# Empty username / no argument returns 1
 run_test "is_org_bot: empty username rejected" 1 \
   'is_org_bot ""'
 
-# No argument returns 1
 run_test "is_org_bot: no argument rejected" 1 \
   'is_org_bot'
 
-# Empty ORG_NAME returns 1
-run_test "is_org_bot: empty ORG_NAME rejected" 1 \
-  'is_org_bot "test-org-coder[bot]"' \
-  "ORG_NAME="
-
-# Different org bot does not match
-run_test "is_org_bot: different org rejected" 1 \
-  'is_org_bot "other-org-coder[bot]"'
-
-# Any org-prefixed first-party agent bot matches, not just coder/code
-run_test "is_org_bot: review bot matches" 0 \
-  'is_org_bot "test-org-review[bot]"'
-
-run_test "is_org_bot: triage bot matches" 0 \
-  'is_org_bot "test-org-triage[bot]"'
-
-run_test "is_org_bot: retro bot matches" 0 \
-  'is_org_bot "test-org-retro[bot]"'
-
-run_test "is_org_bot: prioritize bot matches" 0 \
-  'is_org_bot "test-org-prioritize[bot]"'
-
-# Third-party bots without the org prefix are rejected even though they
-# end in [bot]
-run_test "is_org_bot: third-party bot rejected" 1 \
-  'is_org_bot "renovate[bot]"'
-
-# ORG_NAME is matched literally, not as a regex fragment — an org name
-# containing regex metacharacters must not be treated as a pattern
-run_test "is_org_bot: org name with regex metacharacters matches literally" 0 \
+# ORG_NAME is matched literally (plain string equality in the role loop,
+# not a glob/regex), so special characters in an org name can't be
+# misinterpreted as a pattern
+run_test "is_org_bot: org name with special characters matches literally" 0 \
   'is_org_bot "a+b.c-coder[bot]"' \
   "ORG_NAME=a+b.c"
 
-run_test "is_org_bot: regex-metachar org name rejects unrelated bot" 1 \
-  'is_org_bot "abXc-coder[bot]"' \
-  "ORG_NAME=a+b.c"
+# --- is_org_bot role-filter tests (used by the pull_request_review ->
+# fix dispatch gate, which must match specifically the review bot, not
+# any fullsend agent bot) ---
+
+run_test "is_org_bot: role filter matches shared bot with matching role" 0 \
+  'is_org_bot "fullsend-ai-review[bot]" review'
+
+run_test "is_org_bot: role filter rejects shared bot with different role" 1 \
+  'is_org_bot "fullsend-ai-coder[bot]" review'
+
+run_test "is_org_bot: role filter matches self-managed bot with matching role" 0 \
+  'is_org_bot "test-org-review[bot]" review'
+
+run_test "is_org_bot: role filter rejects self-managed bot with different role" 1 \
+  'is_org_bot "test-org-coder[bot]" review'
 
 # --- has_label tests ---
 
