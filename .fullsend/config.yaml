@@ -1,3 +1,8 @@
+# fullsend per-repo configuration
+# https://github.com/fullsend-ai/fullsend
+#
+# This file configures fullsend for per-repo installation mode.
+# See ADR 0033 for details.
 version: "1"
 runtime: dummy
 roles:
@@ -7,27 +12,9 @@ roles:
     - fix
     - retro
     - prioritize
-agents:
-    - name: issue-ping
-      source: harness/issue-ping.yaml
-    - name: pr-ping
-      source: harness/pr-ping.yaml
-    - name: review-ping
-      source: harness/review-ping.yaml
-    - name: fork-pr-ping
-      source: harness/fork-pr-ping.yaml
-    - name: fork-pr-sync
-      source: harness/fork-pr-sync.yaml
-    - name: url-ping
-      source: https://raw.githubusercontent.com/halfsend-10/url-harness-host/main/harness/url-ping.yaml#sha256=8c36fd364d31913862e4235bc48f739b106a6123cd0295dd4b9505eb72b4cc1b
-    - name: local-ping
-      source: harness/local-ping.yaml
-    - name: url-mixed
-      source: https://raw.githubusercontent.com/halfsend-10/url-harness-host/main/harness/url-mixed.yaml#sha256=74ec8c7134bd54f52b8ad4454eba8ac6762dc7629634515179ade6a938acdf03
 allowed_remote_resources:
     - https://raw.githubusercontent.com/fullsend-ai/fullsend/
     - https://raw.githubusercontent.com/fullsend-ai/agents/
-    - https://raw.githubusercontent.com/halfsend-10/url-harness-host/
 create_issues:
     allow_targets:
         repos:
