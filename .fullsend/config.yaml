@@ -22,6 +22,8 @@ agents:
       source: https://raw.githubusercontent.com/halfsend-10/url-harness-host/main/harness/url-ping.yaml#sha256=8c36fd364d31913862e4235bc48f739b106a6123cd0295dd4b9505eb72b4cc1b
     - name: local-ping
       source: harness/local-ping.yaml
+    - name: url-mixed
+      source: https://raw.githubusercontent.com/halfsend-10/url-harness-host/main/harness/url-mixed.yaml#sha256=74ec8c7134bd54f52b8ad4454eba8ac6762dc7629634515179ade6a938acdf03
 allowed_remote_resources:
     - https://raw.githubusercontent.com/fullsend-ai/fullsend/
     - https://raw.githubusercontent.com/fullsend-ai/agents/
