@@ -18,9 +18,12 @@ agents:
       source: harness/fork-pr-ping.yaml
     - name: fork-pr-sync
       source: harness/fork-pr-sync.yaml
+    - name: url-ping
+      source: https://raw.githubusercontent.com/halfsend-10/url-harness-host/main/harness/url-ping.yaml#sha256=8c36fd364d31913862e4235bc48f739b106a6123cd0295dd4b9505eb72b4cc1b
 allowed_remote_resources:
     - https://raw.githubusercontent.com/fullsend-ai/fullsend/
     - https://raw.githubusercontent.com/fullsend-ai/agents/
+    - https://raw.githubusercontent.com/halfsend-10/url-harness-host/
 create_issues:
     allow_targets:
         repos:
