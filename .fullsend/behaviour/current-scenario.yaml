@@ -1,1 +1,9 @@
-ops: []
+ops:
+    - description: Issue URL set
+      op: assert_env
+      args: GITHUB_ISSUE_URL
+    - description: Prove URL execution
+      op: write_fixture
+      args: output/dispatch-url-ok.json, fixtures/dispatch/ok.json
+      content: |
+        {"status":"ok","source":"harness-dispatch-behaviour-test"}
