@@ -26,7 +26,7 @@ on:
       fullsend_version:
         required: false
         type: string
-        default: "latest"
+        default: ""
       install_mode:
         required: false
         type: string
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout config repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # checkout@v7 blocks fork PR checkouts on pull_request_target by default.
           # Safe here: only .fullsend/ config is read, no fork code is executed,
@@ -74,7 +74,7 @@ jobs:
 
       - name: Checkout upstream defaults
         if: hashFiles('.defaults/action.yml', '.fullsend/.defaults/action.yml') == ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -142,7 +142,7 @@ jobs:
           mint_url: ${{ inputs.mint_url }}
 
       - name: Checkout target repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: ${{ inputs.source_repo }}
           token: ${{ steps.app-token.outputs.token }}
@@ -174,7 +174,7 @@ jobs:
           MINT_REPOS: ${{ steps.repo-parts.outputs.name != '' && (inputs.install_mode == 'per-repo' && steps.repo-parts.outputs.name || format('{0},.fullsend', steps.repo-parts.outputs.name)) || '' }}
         with:
           agent: retro
-          version: ${{ inputs.fullsend_version }}
+          version: ${{ inputs.fullsend_version || job.workflow_sha }}
           fullsend-dir: ${{ inputs.install_mode == 'per-repo' && '.fullsend' || '' }}
           run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           status-repo: ${{ inputs.source_repo }}
