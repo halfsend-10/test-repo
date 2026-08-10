@@ -80,7 +80,6 @@ jobs:
     runs-on: ${{ inputs.runner_image }}
     permissions:
       contents: read
-      issues: read
       pull-requests: read
     outputs:
       stage: ${{ steps.role-check.outputs.skipped != 'true' && steps.agent-check.outputs.skipped != 'true' && steps.pr-check.outputs.skipped != 'true' && steps.route.outputs.stage || '' }}
@@ -177,10 +176,6 @@ jobs:
             return 1
           }
 
-          # NOTE: takes the literal first line — does not skip leading blank
-          # lines (stop-agent.sh does). Harmless now because the shim
-          # contains() guard routes stop commands away before dispatch, but
-          # align this when CEL triggers replace the bash guards (ADR 0086).
           COMMAND=""
           if [[ -n "${COMMENT_BODY:-}" ]]; then
             COMMAND="$(printf '%s\n' "${COMMENT_BODY}" | head -1 | tr -d '\r' | awk '{print $1}')"
@@ -233,15 +228,11 @@ jobs:
                     STAGE="prioritize"
                   fi
                   ;;
-                /fs-stop|/fs-fix-stop)
-                  # Handled by the shim stop-agent job — do not route.
-                  ;;
                 *)
                   # Intentionally weaker gate: allows external reporters to
                   # re-trigger triage by providing clarification on needs-info
                   # issues. Full write-permission check is not required here.
-                  # Skip when fullsend-no-triage is present (/fs-stop triage).
-                  if has_label "needs-info" && ! has_label "feature" && ! has_label "fullsend-no-triage"; then
+                  if has_label "needs-info" && ! has_label "feature"; then
                     if [[ "${COMMENT_USER_TYPE}" != "Bot" ]]; then
                       if [[ "${COMMENT_AUTHOR_ASSOC}" != "NONE" ]] || is_issue_author; then
                         STAGE="triage"
@@ -255,33 +246,23 @@ jobs:
             issues)
               if [[ "${EVENT_ACTION}" == "opened" ]]; then
                 if is_event_actor_authorized "${ISSUE_USER_LOGIN}" triage; then
-                  if ! has_label "fullsend-no-triage"; then
-                    STAGE="triage"
-                  fi
+                  STAGE="triage"
                 fi
               elif [[ "${EVENT_ACTION}" == "edited" ]]; then
                 if is_event_actor_authorized "${EVENT_SENDER_LOGIN}" triage; then
-                  if ! has_label "fullsend-no-triage"; then
-                    STAGE="triage"
-                  fi
+                  STAGE="triage"
                 fi
               elif [[ "${EVENT_ACTION}" == "labeled" ]]; then
                 if [[ "${TRIGGERING_LABEL}" == "ready-for-triage" ]]; then
-                  if ! has_label "fullsend-no-triage"; then
-                    STAGE="triage"
-                  fi
+                  STAGE="triage"
                 elif [[ "${TRIGGERING_LABEL}" == "ready-to-code" ]]; then
                   # Mutation stage: write+ labeler, or bots (agent handoff).
                   if [[ "${EVENT_SENDER_LOGIN}" =~ \[bot\]$ ]] || is_event_actor_authorized "${EVENT_SENDER_LOGIN}"; then
-                    if ! has_label "fullsend-no-code"; then
-                      STAGE="code"
-                    fi
+                    STAGE="code"
                   fi
                 elif [[ "${TRIGGERING_LABEL}" == "ready-for-review" ]]; then
                   if [[ "${ISSUE_IS_PR}" == "true" ]]; then
-                    if ! has_label "fullsend-no-review"; then
-                      STAGE="review"
-                    fi
+                    STAGE="review"
                   fi
                 fi
               fi
@@ -291,26 +272,18 @@ jobs:
               case "${EVENT_ACTION}" in
                 opened|synchronize|ready_for_review)
                   if [[ "${PR_USER_LOGIN}" =~ \[bot\]$ ]] || is_event_actor_authorized "${PR_USER_LOGIN}" triage; then
-                    # fullsend-no-review skips auto review; /fs-review bypasses this gate.
-                    if ! has_label "fullsend-no-review" "${PR_LABELS}"; then
-                      STAGE="review"
-                    fi
+                    STAGE="review"
                   fi
                   ;;
                 labeled)
                   if [[ "${TRIGGERING_LABEL}" == "ready-for-review" ]]; then
-                    if ! has_label "fullsend-no-review" "${PR_LABELS}"; then
-                      STAGE="review"
-                    fi
+                    STAGE="review"
                   fi
                   ;;
                 closed)
                   # Intentional ungated: any closer may trigger read-only retro
                   # (lifecycle accounting). See ADR 0054 #5223 note.
-                  # fullsend-no-retro skips auto retro; /fs-retro bypasses.
-                  if ! has_label "fullsend-no-retro" "${PR_LABELS}"; then
-                    STAGE="retro"
-                  fi
+                  STAGE="retro"
                   ;;
               esac
               ;;
@@ -357,38 +330,15 @@ jobs:
           SOURCE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Query issues for PRs that actually close them (Fixes/Closes/Resolves
-          # keywords), not a substring search over title/body — the latter
-          # false-positives on any PR that merely references the issue (#5575).
-          # closedByPullRequestsReferences also returns MERGED PRs regardless of
-          # includeClosedPrs, so filter on .state explicitly. GraphQL's Bot.login
-          # omits the REST "[bot]" suffix, so match on __typename == "Bot" rather
-          # than a literal "fullsend-ai-coder[bot]" string — see
-          # docs/contributing/bot-identities.md for the login.
-          OWNER="${SOURCE_REPO%%/*}"
-          REPO_NAME="${SOURCE_REPO##*/}"
-          GQL_ERR=$(mktemp)
-          if ! LINKED_PRS=$(gh api graphql -f query='
-            query($owner: String!, $repo: String!, $number: Int!) {
-              repository(owner: $owner, name: $repo) {
-                issue(number: $number) {
-                  closedByPullRequestsReferences(first: 20) {
-                    nodes { number state author { login __typename } }
-                  }
-                }
-              }
-            }' -f owner="${OWNER}" -f repo="${REPO_NAME}" -F number="${ISSUE_NUMBER}" \
-            --jq '[.data.repository.issue.closedByPullRequestsReferences.nodes[]
-                   | select(.state == "OPEN")
-                   | select(.author.__typename != "Bot" or .author.login != "fullsend-ai-coder")]
-                   | .[].number' \
-            2>"${GQL_ERR}"); then
-            echo "::warning::Linked-PR query failed for issue #${ISSUE_NUMBER}: $(tr '\n' ' ' < "${GQL_ERR}" | sed 's/::/__/g')"
-            LINKED_PRS=""
-          fi
-          rm -f "${GQL_ERR}"
-          if [[ -n "${LINKED_PRS}" ]]; then
-            echo "::notice::Open PR(s) linked to close issue #${ISSUE_NUMBER} found — skipping code dispatch"
+          BOT_LOGIN="fullsend-ai[bot]"
+          CODER_BOT_LOGIN="fullsend-ai-coder[bot]"
+          MENTIONING_PRS="$(gh pr list --repo "${SOURCE_REPO}" --state open \
+            --search "${ISSUE_NUMBER} in:title,body" \
+            --json number,author \
+            --jq "[.[] | select(.author.login != \"${BOT_LOGIN}\" and .author.login != \"${CODER_BOT_LOGIN}\")] | .[].number" \
+            2>/dev/null || true)"
+          if [[ -n "${MENTIONING_PRS}" ]]; then
+            echo "::notice::Open PR(s) mentioning issue #${ISSUE_NUMBER} found — skipping code dispatch"
             echo "skipped=true" >> "${GITHUB_OUTPUT}"
           fi
 
@@ -1706,4 +1656,3 @@ jobs:
           status-repo: ${{ matrix.status_repo }}
           status-number: ${{ matrix.status_number }}
           mint-url: ${{ inputs.mint_url }}
-          pr-head-sha: ${{ fromJSON(matrix.event_payload).pull_request.head.sha || '' }}
