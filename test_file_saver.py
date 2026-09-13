@@ -26,10 +26,10 @@ class TestSaveFile(unittest.TestCase):
             os.remove(os.path.join(self.tmpdir, name))
         os.rmdir(self.tmpdir)
 
+    # -- helpers ----------------------------------------------------------
+
     def _path(self, name: str) -> str:
         return os.path.join(self.tmpdir, name)
-
-    # -- helpers ----------------------------------------------------------
 
     def _assert_roundtrip(self, content: str, filename: str) -> None:
         path = self._path(filename)

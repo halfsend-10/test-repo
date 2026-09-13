@@ -3,7 +3,7 @@
 Fix for issue #1411: The previous implementation allocated the write
 buffer based on character count (len(text)), which is correct for ASCII
 but underestimates the byte size when multibyte UTF-8 characters are
-present.  For content above the 64 KiB chunk threshold this caused a
+present. For content above the 64 KiB chunk threshold this caused a
 buffer overflow / segfault.
 
 The fix uses len(text.encode("utf-8")) — the actual byte length — when
