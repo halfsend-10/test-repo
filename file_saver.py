@@ -10,7 +10,6 @@ The fix uses len(text.encode("utf-8")) — the actual byte length — when
 sizing the buffer and when chunking writes.
 """
 
-import io
 import os
 
 # 64 KiB chunk size used for buffered writes.
