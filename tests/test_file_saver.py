@@ -3,9 +3,6 @@
 Covers the UTF-8 multibyte buffer-sizing fix (issue #1512).
 """
 
-import os
-import tempfile
-
 from src.file_saver import BUFFER_SIZE, _count_chars_for_byte_budget, save_file
 
 
@@ -17,6 +14,13 @@ class TestCountCharsForByteBudget:
         data = "a" * 100
         result = _count_chars_for_byte_budget(data, 0, 50)
         assert result == 50
+
+    def test_two_byte_chars(self):
+        """Accented Latin characters each consume two UTF-8 bytes."""
+        data = "é" * 20  # 20 e-acute characters
+        result = _count_chars_for_byte_budget(data, 0, 10)
+        # 10 bytes fits exactly 5 two-byte chars
+        assert result == 5
 
     def test_emoji_four_byte_chars(self):
         """Emoji characters each consume four UTF-8 bytes."""
@@ -62,66 +66,43 @@ class TestCountCharsForByteBudget:
 class TestSaveFile:
     """Tests for the save_file function."""
 
-    def test_save_large_file_with_emoji(self):
+    def test_save_large_file_with_emoji(self, tmp_path):
         """Save a 65KB+ document containing emoji (4-byte UTF-8)."""
-        # Create content larger than 64KB with emoji
         emoji_char = "\U0001f600"  # 4 bytes each
-        # Need > 65536 bytes: 65536 / 4 = 16384 emoji = 65536 bytes
-        # Use 17000 emoji = 68000 bytes > 64KB
+        # 17000 emoji = 68000 bytes > 64KB
         content = emoji_char * 17000
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-            assert os.path.getsize(path) == len(content.encode("utf-8"))
-        finally:
-            os.unlink(path)
+        assert result == content
+        assert path.stat().st_size == len(content.encode("utf-8"))
 
-    def test_save_large_file_with_cjk(self):
+    def test_save_large_file_with_cjk(self, tmp_path):
         """Save a 64KB document with CJK characters (3-byte UTF-8)."""
         cjk_char = "世"  # 3 bytes each
         # 22000 chars * 3 bytes = 66000 bytes > 64KB
         content = cjk_char * 22000
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-        finally:
-            os.unlink(path)
+        assert result == content
 
-    def test_save_large_ascii_file(self):
+    def test_save_large_ascii_file(self, tmp_path):
         """Verify ASCII-only files >64KB still save correctly."""
         content = "A" * 70000  # 70KB of ASCII
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-            assert os.path.getsize(path) == 70000
-        finally:
-            os.unlink(path)
+        assert result == content
+        assert path.stat().st_size == 70000
 
-    def test_save_boundary_char_count_fits_byte_count_exceeds(self):
+    def test_save_boundary_char_count_fits_byte_count_exceeds(self, tmp_path):
         """File whose character count fits in 64KB but byte count exceeds it.
 
         This is the core regression case: if the buffer used character
@@ -132,69 +113,41 @@ class TestSaveFile:
         emoji_char = "\U0001f600"  # 4 bytes each
         # 20000 chars < 65536 char limit, but 80000 bytes > 65536 byte limit
         content = emoji_char * 20000
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-            assert os.path.getsize(path) == 80000
-        finally:
-            os.unlink(path)
+        assert result == content
+        assert path.stat().st_size == 80000
 
-    def test_save_small_file(self):
+    def test_save_small_file(self, tmp_path):
         """Files under 64KB should still save correctly."""
         content = "Hello, world! \U0001f30d"
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-        finally:
-            os.unlink(path)
+        assert result == content
 
-    def test_save_empty_file(self):
+    def test_save_empty_file(self, tmp_path):
         """Empty content should produce an empty file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        path = tmp_path / "out.txt"
 
-        try:
-            save_file(path, "")
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == ""
-        finally:
-            os.unlink(path)
+        save_file(str(path), "")
+        result = path.read_text(encoding="utf-8")
 
-    def test_save_mixed_encoding(self):
+        assert result == ""
+
+    def test_save_mixed_encoding(self, tmp_path):
         """Mixed ASCII and multibyte characters spanning the buffer boundary."""
-        # Mix ASCII and emoji to create a boundary-crossing scenario
         ascii_part = "x" * (BUFFER_SIZE - 10)
         emoji_part = "\U0001f600" * 100  # 400 bytes of emoji
         content = ascii_part + emoji_part
+        path = tmp_path / "out.txt"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as tmp:
-            path = tmp.name
+        save_file(str(path), content)
+        result = path.read_text(encoding="utf-8")
 
-        try:
-            save_file(path, content)
-            with open(path, "r", encoding="utf-8") as f:
-                result = f.read()
-            assert result == content
-        finally:
-            os.unlink(path)
+        assert result == content

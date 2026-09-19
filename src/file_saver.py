@@ -15,6 +15,11 @@ def _count_chars_for_byte_budget(data: str, offset: int, max_bytes: int) -> int:
     UTF-8 characters (emoji, CJK, accented letters, etc.) are measured
     correctly. This prevents the encoded chunk from exceeding the
     buffer size.
+
+    Args:
+        data: The full string to read from.
+        offset: Character index to start counting from.
+        max_bytes: Maximum number of UTF-8 encoded bytes allowed.
     """
     byte_count = 0
     char_count = 0
@@ -44,5 +49,9 @@ def save_file(path: str, content: str) -> None:
             chunk_chars = _count_chars_for_byte_budget(
                 content, offset, BUFFER_SIZE
             )
+            if chunk_chars == 0:
+                raise ValueError(
+                    "BUFFER_SIZE too small to fit a single character"
+                )
             f.write(content[offset : offset + chunk_chars])
             offset += chunk_chars
