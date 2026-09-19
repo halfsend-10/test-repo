@@ -8,7 +8,7 @@ multibyte characters.
 BUFFER_SIZE = 65536  # 64KB buffer
 
 
-def _calculate_buffer_byte_size(data: str, offset: int, max_bytes: int) -> int:
+def _count_chars_for_byte_budget(data: str, offset: int, max_bytes: int) -> int:
     """Return the number of characters from offset that fit within max_bytes.
 
     Counts the encoded byte length of each character so that multibyte
@@ -41,12 +41,8 @@ def save_file(path: str, content: str) -> None:
     with open(path, "w", encoding="utf-8") as f:
         offset = 0
         while offset < len(content):
-            chunk_chars = _calculate_buffer_byte_size(
+            chunk_chars = _count_chars_for_byte_budget(
                 content, offset, BUFFER_SIZE
             )
-            if chunk_chars == 0:
-                # Single character exceeds buffer (should not happen
-                # with 64KB buffer, but guard against it).
-                chunk_chars = 1
             f.write(content[offset : offset + chunk_chars])
             offset += chunk_chars
