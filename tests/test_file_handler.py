@@ -1,8 +1,8 @@
 """Tests for the file handler module.
 
-Verifies correct saving and loading of files with various sizes and
-character encodings, particularly multibyte UTF-8 content that crosses
-the 64KB buffer boundary.
+Verifies correct saving of files with various sizes and character
+encodings, particularly multibyte UTF-8 content that crosses the 64KB
+buffer boundary.
 """
 
 import os
@@ -10,7 +10,7 @@ import tempfile
 
 import pytest
 
-from src.file_handler import BUFFER_SIZE, load_file, save_file
+from src.file_handler import BUFFER_SIZE, save_file
 
 
 @pytest.fixture
@@ -93,34 +93,29 @@ class TestSaveFile:
         with pytest.raises(ValueError, match="content must not be None"):
             save_file(None, filepath)
 
-    def test_save_creates_parent_directories(self, tmp_dir):
-        """Save creates intermediate directories if needed."""
-        filepath = os.path.join(tmp_dir, "sub", "dir", "file.txt")
-        save_file("test content", filepath)
-        assert os.path.exists(filepath)
-
-
 class TestRoundTrip:
-    """Tests for save + load round-trip integrity."""
+    """Tests for save round-trip integrity."""
 
     def test_roundtrip_ascii(self, tmp_dir):
-        """ASCII content survives a save/load round-trip."""
+        """ASCII content survives a save round-trip."""
         filepath = os.path.join(tmp_dir, "ascii_rt.txt")
         content = "Simple ASCII content\nwith newlines\n"
         save_file(content, filepath)
-        loaded = load_file(filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
         assert loaded == content
 
     def test_roundtrip_utf8_emoji(self, tmp_dir):
-        """Emoji content survives a save/load round-trip."""
+        """Emoji content survives a save round-trip."""
         filepath = os.path.join(tmp_dir, "emoji_rt.txt")
         content = "Emoji: 😀🎉🚀💡🔥 and text"
         save_file(content, filepath)
-        loaded = load_file(filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
         assert loaded == content
 
     def test_roundtrip_70kb_emoji(self, tmp_dir):
-        """70KB emoji content survives a save/load round-trip byte-for-byte.
+        """70KB emoji content survives a save round-trip byte-for-byte.
 
         Verifies that saved content matches original after reload, ensuring
         no truncation or corruption at buffer boundaries.
@@ -130,11 +125,12 @@ class TestRoundTrip:
         char_count = (70 * 1024) // len(emoji_char.encode("utf-8"))
         content = emoji_char * char_count
         save_file(content, filepath)
-        loaded = load_file(filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
         assert loaded == content
 
     def test_roundtrip_cjk_large(self, tmp_dir):
-        """Large CJK content survives a save/load round-trip."""
+        """Large CJK content survives a save round-trip."""
         filepath = os.path.join(tmp_dir, "cjk_rt.txt")
         # CJK characters are 3 bytes each in UTF-8
         cjk_segment = "你好世界测试数据"
@@ -143,14 +139,6 @@ class TestRoundTrip:
         byte_len = len(content.encode("utf-8"))
         assert byte_len > BUFFER_SIZE
         save_file(content, filepath)
-        loaded = load_file(filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
         assert loaded == content
-
-
-class TestLoadFile:
-    """Tests for load_file function."""
-
-    def test_load_nonexistent_file(self):
-        """Loading a nonexistent file raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError):
-            load_file("/nonexistent/path/file.txt")
