@@ -16,6 +16,11 @@ def save_file(content: str, filepath: str) -> int:
     ensures multibyte UTF-8 characters (emoji, CJK, etc.) are handled
     correctly for files of any size.
 
+    The caller is responsible for validating and sanitizing
+    ``filepath`` before calling this function. No path
+    canonicalization, directory restriction, or symlink checks are
+    performed.
+
     Args:
         content: The string content to save.
         filepath: The destination file path.
