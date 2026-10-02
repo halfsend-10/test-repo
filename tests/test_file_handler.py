@@ -99,9 +99,6 @@ class TestSaveFile:
         assert byte_len > BUFFER_SIZE, "Test content must exceed buffer size"
         bytes_written = save_file(content, filepath)
         assert bytes_written == byte_len
-        with open(filepath, "r", encoding="utf-8") as f:
-            loaded = f.read()
-        assert loaded == content
 
     def test_save_mixed_ascii_and_multibyte(self, tmp_dir):
         """Save mixed ASCII and multibyte content across the buffer boundary.
@@ -121,13 +118,35 @@ class TestSaveFile:
         assert byte_len > BUFFER_SIZE, "Test content must exceed buffer size"
         bytes_written = save_file(content, filepath)
         assert bytes_written == byte_len
-        with open(filepath, "r", encoding="utf-8") as f:
-            loaded = f.read()
-        assert loaded == content
 
 
 class TestRoundTrip:
     """Round-trip integrity at the buffer boundary."""
+
+    def test_roundtrip_exact_buffer_boundary(self, tmp_dir):
+        """Content at exactly BUFFER_SIZE bytes survives a round-trip.
+
+        The exact boundary is the highest-risk off-by-one point.
+        Verifies that file content matches the original after reload.
+        """
+        filepath = os.path.join(tmp_dir, "exact_boundary_rt.txt")
+        content = "a" * BUFFER_SIZE
+        save_file(content, filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
+
+    def test_roundtrip_buffer_boundary_plus_one(self, tmp_dir):
+        """Content at BUFFER_SIZE + 1 bytes survives a round-trip.
+
+        Verifies a single-byte second chunk is written and read correctly.
+        """
+        filepath = os.path.join(tmp_dir, "boundary_plus_one_rt.txt")
+        content = "a" * (BUFFER_SIZE + 1)
+        save_file(content, filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
 
     def test_roundtrip_70kb_emoji(self, tmp_dir):
         """70KB emoji content survives a save–load round-trip byte-for-byte.
@@ -139,6 +158,38 @@ class TestRoundTrip:
         emoji_char = "\U0001f389"
         char_count = (70 * 1024) // len(emoji_char.encode("utf-8"))
         content = emoji_char * char_count
+        save_file(content, filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
+
+    def test_roundtrip_cjk_across_boundary(self, tmp_dir):
+        """CJK content crossing the buffer boundary survives a round-trip.
+
+        CJK characters are 3 bytes in UTF-8. Since BUFFER_SIZE (65536)
+        mod 3 == 1, this exercises unaligned multibyte content at chunk
+        boundaries.
+        """
+        filepath = os.path.join(tmp_dir, "cjk_boundary_rt.txt")
+        cjk_char = "世"
+        char_count = (BUFFER_SIZE // len(cjk_char.encode("utf-8"))) + 100
+        content = cjk_char * char_count
+        save_file(content, filepath)
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
+
+    def test_roundtrip_mixed_ascii_and_multibyte(self, tmp_dir):
+        """Mixed ASCII and multibyte content survives a round-trip.
+
+        Exercises unpredictable byte-vs-character alignment at chunk
+        boundaries with real-world-like mixed content.
+        """
+        filepath = os.path.join(tmp_dir, "mixed_boundary_rt.txt")
+        pattern = "hello世界\U0001f389"
+        pattern_bytes = len(pattern.encode("utf-8"))
+        repeat_count = (BUFFER_SIZE // pattern_bytes) + 10
+        content = pattern * repeat_count
         save_file(content, filepath)
         with open(filepath, "r", encoding="utf-8") as f:
             loaded = f.read()
