@@ -1,8 +1,8 @@
 """Tests for the file handler module.
 
 Verifies correct saving of files with multibyte UTF-8 content at and
-around the 64KB buffer boundary — the regression scenario from issue
-#1737.
+around the 64KB buffer boundary, covering 1-byte (ASCII), 3-byte (CJK),
+and 4-byte (emoji) characters as well as mixed-encoding content.
 """
 
 import os
@@ -64,16 +64,14 @@ class TestSaveFile:
         bytes_written = save_file(content, filepath)
         assert bytes_written == byte_len
 
-    def test_save_70kb_utf8_file(self, tmp_dir):
-        """Save ~70KB file with emoji characters (over buffer boundary).
+    def test_save_70kb_utf8_emoji(self, tmp_dir):
+        """Save ~70KB file with 4-byte emoji characters (over buffer boundary).
 
-        This is the primary regression test for the segfault reported in
-        issue #1737. Previously, the buffer was allocated using character
-        count instead of byte length, causing a buffer overflow when
-        multibyte characters pushed the actual byte count past 64KB.
+        Emoji are 4 bytes in UTF-8. Since BUFFER_SIZE (65536) mod 4 == 0,
+        chunk boundaries align with character boundaries — this verifies
+        multi-chunk writes with evenly-aligned multibyte content.
         """
         filepath = os.path.join(tmp_dir, "70kb_utf8.txt")
-        # Each emoji is 4 bytes in UTF-8; build ~70KB of emoji content
         emoji_char = "\U0001f389"
         char_count = (70 * 1024) // len(emoji_char.encode("utf-8"))
         content = emoji_char * char_count
@@ -82,15 +80,60 @@ class TestSaveFile:
         bytes_written = save_file(content, filepath)
         assert bytes_written == byte_len
 
+    def test_save_cjk_across_buffer_boundary(self, tmp_dir):
+        """Save CJK content whose byte length crosses the buffer boundary.
+
+        CJK characters are 3 bytes in UTF-8. Since BUFFER_SIZE (65536)
+        mod 3 == 1, the raw byte stream would split a CJK character
+        across chunk boundaries if slicing were character-based. Because
+        the implementation encodes first and slices the byte buffer,
+        this is safe — but the test confirms no corruption occurs.
+        """
+        filepath = os.path.join(tmp_dir, "cjk_boundary.txt")
+        # U+4E16 (世) is 3 bytes in UTF-8
+        cjk_char = "世"
+        # Enough characters to exceed BUFFER_SIZE in bytes
+        char_count = (BUFFER_SIZE // len(cjk_char.encode("utf-8"))) + 100
+        content = cjk_char * char_count
+        byte_len = len(content.encode("utf-8"))
+        assert byte_len > BUFFER_SIZE, "Test content must exceed buffer size"
+        bytes_written = save_file(content, filepath)
+        assert bytes_written == byte_len
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
+
+    def test_save_mixed_ascii_and_multibyte(self, tmp_dir):
+        """Save mixed ASCII and multibyte content across the buffer boundary.
+
+        Real-world files contain a mix of ASCII and multibyte characters.
+        This test verifies correct handling when byte length differs
+        unpredictably from character count due to mixed encoding widths.
+        """
+        filepath = os.path.join(tmp_dir, "mixed_boundary.txt")
+        # Build a repeating pattern: ASCII + CJK + emoji
+        pattern = "hello世界\U0001f389"
+        pattern_bytes = len(pattern.encode("utf-8"))
+        # Repeat enough to cross the buffer boundary
+        repeat_count = (BUFFER_SIZE // pattern_bytes) + 10
+        content = pattern * repeat_count
+        byte_len = len(content.encode("utf-8"))
+        assert byte_len > BUFFER_SIZE, "Test content must exceed buffer size"
+        bytes_written = save_file(content, filepath)
+        assert bytes_written == byte_len
+        with open(filepath, "r", encoding="utf-8") as f:
+            loaded = f.read()
+        assert loaded == content
+
 
 class TestRoundTrip:
     """Round-trip integrity at the buffer boundary."""
 
     def test_roundtrip_70kb_emoji(self, tmp_dir):
-        """70KB emoji content survives a save round-trip byte-for-byte.
+        """70KB emoji content survives a save–load round-trip byte-for-byte.
 
-        Verifies that saved content matches original after reload, ensuring
-        no truncation or corruption at buffer boundaries.
+        Verifies that saved content matches the original after reload,
+        ensuring no truncation or corruption at chunk boundaries.
         """
         filepath = os.path.join(tmp_dir, "70kb_emoji_rt.txt")
         emoji_char = "\U0001f389"
